@@ -4,13 +4,15 @@ import numpy as np
 
 from src.Tetris_Env import TetrisEnv
 from src.genetic_agent import GeneticAgent
+from scipy.spatial import distance
 
-BATCH_SIZE = 1000
-
+BATCH_SIZE = 100
+NUM_ATTRIBUTE = 5
+TOURNAMENT_SIZE = 2
 
 def mutate(weight):
     if random.random() < 0.05:
-        pos = random.randrange(0, 4)
+        pos = random.randrange(0, NUM_ATTRIBUTE)
         weight[pos] = weight[pos] + random.random() * 0.4 - 0.2
     return weight
 
@@ -19,14 +21,14 @@ class GeneticLearner():
     agents = []
     env = TetrisEnv()
 
-    def initialization(self):
-        for i in range(BATCH_SIZE):
-            weight = self.normailize(np.random.rand(4) * 2 - 1)
+    def replenish(self, num = BATCH_SIZE):
+        for i in range(num):
+            weight = self.normailize(np.random.rand(NUM_ATTRIBUTE)*-1)
             self.agents.append(GeneticAgent(env=self.env, weight=weight))
 
     def normailize(self, weight):
-        square_sum = sum(k ** 2 for k in weight)
-        return weight / square_sum
+        square_sum_root = np.sqrt(sum(k ** 2 for k in weight))
+        return weight / square_sum_root
 
     def save_weight(self, filepath="weight.txt"):
         f = open(filepath, "w+")
@@ -40,24 +42,27 @@ class GeneticLearner():
     def load_weight(self, filepath="weight.txt"):
         f = open(filepath, "r")
         for line in f:
-            weight = [float(k) for k in line.split()]
+            weight = np.array([float(k) for k in line.split()])
             fitness = None
-            if len(weight) == 5:
-                fitness = weight[4]
-                del weight[4:]
+            if len(weight) == NUM_ATTRIBUTE + 1:
+                fitness = weight[NUM_ATTRIBUTE]
+                weight.resize(NUM_ATTRIBUTE)
             self.agents.append(GeneticAgent(self.env, weight, fitness))
         f.close()
 
     def learn(self, num_generations=1):
         for generation in range(num_generations):
-            for offspring in range(int(0.3 * BATCH_SIZE)):
-                self.agents.append(self.breeding())
+            self.replenish(20)
+            for offspring in range(int(0.2 * BATCH_SIZE)):
+                self.agents.append(self.crossover())
             self.agents.sort(key=lambda x: x.fitness, reverse=True)
+            self.sieve_similar()
             del self.agents[BATCH_SIZE:]
-            print("{} {} \n".format(self.agents[0].fitness, self.agents[1].fitness))
+            self.save_weight("{}th_generation.txt".format(generation + 1))
+            print("{}th_generation: {} {} \n".format(generation+1, self.agents[0].fitness, self.agents[1].fitness))
 
-    def breeding(self):
-        tournament = random.sample(self.agents, int(0.1 * BATCH_SIZE))
+    def crossover(self):
+        tournament = random.sample(self.agents, TOURNAMENT_SIZE)
         best = max(tournament, key=lambda x: x.fitness)
         tournament.remove(best)
         second_best = max(tournament, key=lambda x: x.fitness)
@@ -65,3 +70,16 @@ class GeneticLearner():
         weight = self.normailize(mutate(weight))
         agent = GeneticAgent(self.env, weight)
         return agent
+
+    def sieve_similar(self, closeness = 0.01):
+        i = 0
+        while i < len(self.agents):
+            j = i + 1
+            while j < len(self.agents):
+                if distance.euclidean(self.agents[i].weight, self.agents[j].weight) < closeness:
+                    self.agents.remove(self.agents[j])
+                else:
+                    j = j + 1
+            i = i + 1
+        print("remaining number = {}".format(len(self.agents)))
+        return

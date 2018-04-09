@@ -29,7 +29,6 @@ class TetrisEnv(object):
     board = None
     top = None
     currentPiece = None
-    nextPiece = None
     total_score = 0
     action_space = ActionSpace()
 
@@ -38,7 +37,6 @@ class TetrisEnv(object):
         self.board = [[0] * Col for i in range(Row)]
         self.top = [0] * Col
         self.currentPiece = self.new_piece()
-        self.nextPiece = self.new_piece()
         self.total_score = 0
 
     def step(self, action):
@@ -46,14 +44,13 @@ class TetrisEnv(object):
         score, is_done = self.perform_action(self.board, self.top, orient, slot, self.currentPiece)
         self.total_score = self.total_score + score
 
-        self.currentPiece = self.nextPiece
-        self.nextPiece = self.new_piece()
-        observation = (deepcopy(self.board), deepcopy(self.top), self.currentPiece, self.nextPiece)
+        self.currentPiece = self.new_piece()
+        observation = (deepcopy(self.board), deepcopy(self.top), self.currentPiece)
         return observation, self.total_score, is_done
 
     def reset(self, seed = 0):
         self.__init__(seed)
-        observation = (deepcopy(self.board), deepcopy(self.top), self.currentPiece, self.nextPiece)
+        observation = (deepcopy(self.board), deepcopy(self.top), self.currentPiece)
         return observation
 
     def seed(self, seed=None):
@@ -101,14 +98,17 @@ class TetrisEnv(object):
         return score, is_done
 
     def evaluate_board(self, board, top):
-        total_height = sum(top)
+        average_height = sum(top) / 10.0
+        max_height = max(top)
         diff_height = 0
         for i in range(Col - 1):
             diff_height = diff_height + abs(top[i] - top[i + 1])
         holes = 0
+        depth_holes = 0
         for i in range(Row):
             for j in range(Col):
                 if board[i][j] == 0 and i < top[j]:
                     holes = holes + 1
+                    depth_holes = depth_holes + (top[j] - i)
         # arbitrary reward function from online source
-        return total_height, diff_height, holes, self.total_score
+        return average_height, max_height, diff_height, holes, depth_holes
